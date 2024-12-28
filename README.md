@@ -13,7 +13,7 @@ This project demonstrates a CI/CD pipeline using Jenkins, Docker, and Docker Com
   - Deploy the updated application version to an AWS EC2 instance using Docker Compose.
   - Commit the version update back to the Git repository.
 
-## Technologies Used
+## Technologies
 - AWS
 - Jenkins
 - Docker & Docker Hub
@@ -48,7 +48,7 @@ This project demonstrates a CI/CD pipeline using Jenkins, Docker, and Docker Com
 
 ### Increment Version
 This stage dynamically increments the version in `pom.xml` using Maven and sets the image name with the updated version.  
-**Jenkinsfile Snippet:**
+**Jenkinsfile snippet:**
 ```groovy
 stage('increment version') {
     steps {
@@ -92,32 +92,9 @@ stage('commit version update') {
   The updated Docker image is deployed to an EC2 instance using a `docker-compose.yml` file. This ensures the environment is consistent across deployments.
 
 - **Git Commit Strategy:**  
-  To avoid triggering the pipeline by the commit itself, the email `jenkins@example.com` is used in the Git configuration.
+  To avoid triggering the pipeline by the commit itself, the email `jenkins@example.com` is used in the Git configuration as part of build strategy.
 
 ---
 
-## Prerequisites
-- AWS EC2 instance configured for Docker and Docker Compose.
-- Jenkins pipeline configured with:
-  - Maven
-  - Docker
-  - Git credentials (`jenkinspush` for GitHub access)
-- Docker Hub account for pushing the Docker images.
-
----
-
-## How to Use
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/irschad/ci-cd-docker-compose-ec2-dynamic-versioning.git
-   ```
-
-2. Set up Jenkins pipeline using the `Jenkinsfile` provided in the repository.
-
-3. Ensure credentials (`jenkinspush`) are configured in Jenkins for GitHub access.
-
-4. Run the pipeline to build, push, and deploy the application automatically.
-
----
 
 
