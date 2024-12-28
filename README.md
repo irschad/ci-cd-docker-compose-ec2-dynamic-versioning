@@ -1,119 +1,182 @@
-# Deploy Application from Jenkins Pipeline to EC2 Instance (using Docker)
+# Deploy Application from Jenkins Pipeline on EC2 Instance (with Docker Compose)
 
 ## Project Overview
-This project demonstrates the deployment of a web application to an AWS EC2 instance directly from a Jenkins pipeline using Docker. The process automates Continuous Deployment (CD) by extending a CI pipeline with a deployment stage.
+This project demonstrates continuous deployment of a web application using a Jenkins pipeline to an AWS EC2 instance. The deployment leverages Docker Compose for container orchestration and includes optimizations by utilizing a shell script for remote server commands.
 
----
-
-## Technologies: **AWS, Jenkins, Docker, Linux, Git, Java, Maven, Docker Hub**
+### Technologies Used
+- **AWS**: EC2 Instance for deployment
+- **Jenkins**: Pipeline automation
+- **Docker & Docker Compose**: Containerization and orchestration
+- **Linux**: EC2 instance environment
+- **Git**: Source code management
+- **Java & Maven**: Application development and build tools
+- **Docker Hub**: Hosting Docker images
 
 ---
 
 ## Project Description
 The project involves the following steps:
-1. **Prepare the AWS EC2 Instance for Deployment**: Install Docker on the instance.
-2. **Set Up Jenkins Credentials for SSH Access**: Create SSH key credentials for the EC2 server.
-3. **Extend CI Pipeline with Deployment Step**:
-   - Connect to the EC2 instance from Jenkins via SSH.
-   - Deploy the Docker image built in the Jenkins CI pipeline.
-4. **Configure Security Group for EC2**: Open necessary ports to access the web application.
+
+1. **Install Docker Compose on EC2 Instance**:
+   - Install Docker Compose on an AWS EC2 instance to orchestrate containerized services.
+
+2. **Create `docker-compose.yaml`**:
+   - Define a `docker-compose.yaml` file to deploy a Java web application and a PostgreSQL database.
+
+3. **Configure Jenkins Pipeline**:
+   - Create a Jenkins pipeline to build and push the Docker image to Docker Hub and deploy the application using Docker Compose on the EC2 server.
+
+4. **Optimizations**:
+   - Extract Linux commands for remote execution into a separate shell script and execute the script from the Jenkinsfile.
 
 ---
 
-## Steps to Prepare AWS EC2 Instance for Deployment
+## Setup Instructions
 
-### Install Docker
-1. Log in to your EC2 instance via SSH.
-2. Install Docker using the following commands:
+### Step 1: Install Docker Compose on EC2 Instance
+1. SSH into the EC2 instance:
    ```bash
-   sudo yum update -y
-   sudo yum install docker -y
-   sudo service docker start
-   sudo usermod -aG docker ec2-user
+   ssh -i ~/.ssh/aws-ec2.pem ec2-user@<EC2-PUBLIC-IP>
    ```
-3. Verify the Docker installation:
+2. Install Docker Compose:
    ```bash
-   docker --version
+   sudo curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
+   sudo chmod +x /usr/local/bin/docker-compose
+   docker-compose --version
    ```
 
----
+### Step 2: Create `docker-compose.yaml`
+Create a `docker-compose.yaml` file with the following content:
+```yaml
+docker-compose.yaml
+version: '3.8'
+services:
+  java-maven-app:
+    image: irschad/java-app:4.0
+    ports:
+      - 8000:8080
+  postgres:
+    image: postgres:15
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_PASSWORD=my-pwd
+```
 
-## Steps to Create SSH Key Credentials in Jenkins
-1. Install the **SSH Agent** plugin:
-   - Navigate to **Manage Jenkins** > **Manage Plugins**.
-   - Search for and install the "SSH Agent" plugin.
-2. Add SSH Credentials:
-   - Go to **Dashboard** > Your Project > **Credentials**.
-   - Click on **Global credentials (unrestricted)** > **Add Credentials**.
-   - Select **SSH Username with private key**.
-   - Provide:
-     - **ID**: `ec2-server-key`
-     - **Username**: `ec2-user`
-     - **Private Key**: Paste the private key contents.
-   - Save the credentials.
-3. Update EC2 Security Group:
-   - Add the Jenkins server IP to the EC2 instance's inbound rules for port `22` (SSH).
-
----
-
-## Steps to Extend CI Pipeline with Deployment Stage
-
-### Add Deployment Stage to Jenkinsfile
- Edit the `Jenkinsfile` in the project repository to include a deployment stage:
-   ```groovy
-      stage("deploy") {
+### Step 3: Configure Jenkins Pipeline
+#### Initial Jenkinsfile:
+```groovy
+pipeline {   
+    agent any
+    tools {
+        maven 'Maven'
+    }
+    environment {
+        IMAGE_NAME = 'irschad/java-app:4.0'
+    }
+    
+    stages {
+        stage('Build App') {
+            steps {
+                echo 'Building application jar...'
+                buildJar()
+            }
+        }
+        stage('Build Image') {
             steps {
                 script {
-                    echo 'deploying docker image to EC2...'
-                    def dockerCmd = "docker run -p 8080:8080 -d ${IMAGE_NAME}"
+                    echo 'Building the Docker image...'
+                    buildImage(env.IMAGE_NAME)
+                    dockerLogin()
+                    dockerPush(env.IMAGE_NAME)
+                }
+            }
+        } 
+        stage('Deploy') {
+            steps {
+                script {
+                    echo 'Deploying Docker image to EC2...'
+                    def dockerComposeCmd = "docker-compose -f docker-compose.yaml up --detach"
                     sshagent(['aws-ec2-server-key']) {
-                        sh "ssh -o StrictHostKeyChecking=no ec2-user@34.229.224.203 ${dockerCmd}"
+                        sh "scp docker-compose.yaml ec2-user@<EC2-PUBLIC-IP>:/home/ec2-user"
+                        sh "ssh ec2-user@<EC2-PUBLIC-IP> ${dockerComposeCmd}"
                     }
                 }
             }               
         }
-   ```
+    }
+}
+```
 
-### Log In to Docker Hub on EC2 instance
-1. SSH into the EC2 instance:
-   ```bash
-   ssh -i ~/.ssh/ec2-server-key.pem ec2-user@34.229.224.203
-   ```
+#### Optimized Jenkinsfile (Using Shell Script):
+```groovy
+pipeline {   
+    agent any
+    tools {
+        maven 'Maven'
+    }
+    environment {
+        IMAGE_NAME = 'irschad/java-app:4.0'
+    }
+    
+    stages {
+        stage('Build App') {
+            steps {
+                echo 'Building application jar...'
+                buildJar()
+            }
+        }
+        stage('Build Image') {
+            steps {
+                script {
+                    echo 'Building the Docker image...'
+                    buildImage(env.IMAGE_NAME)
+                    dockerLogin()
+                    dockerPush(env.IMAGE_NAME)
+                }
+            }
+        } 
+        stage('Deploy') {
+            steps {
+                script {
+                    echo 'Deploying Docker image to EC2...'
+                    def shellCmd = "bash ./server-cmds.sh ${IMAGE_NAME}"
+                    def ec2Instance = "ec2-user@<EC2-PUBLIC-IP>"
+                    sshagent(['aws-ec2-server-key']) {
+                        sh "scp server-cmds.sh ${ec2Instance}"
+                        sh "scp docker-compose.yaml ${ec2Instance}:/home/ec2-user" 
+                        sh "ssh ${ec2Instance} ${shellCmd}"
+                    }
+                }
+            }               
+        }
+    }
+}
+```
 
-2. Log in to Docker Hub:
-   ```bash
-   docker login
-   ```
+### Step 4: Shell Script for Deployment
+Create a `server-cmds.sh` script:
+```bash
+#!/usr/bin/env bash
+
+export IMAGE=$1
+docker-compose -f docker-compose.yaml up --detach
+echo "Deployment successful!"
+```
 
 ---
 
-## Configure Security Group for Web Application Access
-1. Open the EC2 instance's security group settings in the AWS console.
-2. Add an inbound rule to allow access to port `8080`:
-   - **Type**: Custom TCP
-   - **Port Range**: 8080
-   - **Source**: Anywhere (0.0.0.0/0)
+## Key Features
+- Automates the deployment process for containerized applications using Jenkins pipelines.
+- Leverages Docker Compose to simplify multi-container application deployments.
+- Optimizes remote server commands by consolidating them into a reusable shell script.
 
 ---
 
-## Deploy and Access the Web Application
-1. Trigger the Jenkins pipeline to build and deploy the application automatically via webhook.
-2. Check whether the container is running on the target instance:
-   ```bash
-   docker ps 
-   CONTAINER ID   IMAGE                  COMMAND                  CREATED         STATUS         PORTS                                       NAMES
-   b91cb1618412   irschad/java-app:4.0   "java -jar java-mave…"   9 seconds ago   Up 8 seconds   0.0.0.0:8080->8080/tcp, :::8080->8080/tcp   confident_li
-   ```
-   
-3. Access the deployed application in a browser using the URL:
-   ```
-   http://34.229.224.203:8080
-   ```
-  ![Java Maven App](https://github.com/user-attachments/assets/1d3f4589-7c85-40bc-912b-f78e5adc3a57)
+## Benefits
+- **Scalability**: Easily deploy additional services by updating the `docker-compose.yaml` file.
+- **Reusability**: Shell script and pipeline can be reused for similar deployment scenarios.
+- **Automation**: End-to-end deployment is triggered by Jenkins, reducing manual intervention.
 
-
-## Notes
-- Ensure the Jenkins server can connect to the target EC2 instance via SSH.
-- Update the security groups responsibly to prevent exposing unnecessary ports.
-
+---
 
