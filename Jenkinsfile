@@ -6,7 +6,7 @@ pipeline {
         maven 'Maven'
     }
     environment {
-        IMAGE_NAME = 'irschad/java-app:8.0'
+        IMAGE_NAME = 'irschad/java-app:4.0'
     }
     
     stages {
@@ -32,7 +32,7 @@ pipeline {
                     echo 'deploying docker image to EC2...'
                     def dockerComposeCmd = "docker-compose -f docker-compose.yaml up --detach"
                     sshagent(['aws-ec2-server-key']) {
-                        sh "scp -o StrictHostKeyChecking=no docker-compose.yaml ec2-usre@3.81.55.173:/home/ec2-user" 
+                        sh "scp -o StrictHostKeyChecking=no docker-compose.yaml ec2-user@3.81.55.173:/home/ec2-user" 
                         sh "ssh -o StrictHostKeyChecking=no ec2-user@3.81.55.173 ${dockerComposeCmd}"
                     }
                 }
