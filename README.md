@@ -67,7 +67,7 @@ stage('increment version') {
 
 ### Commit Version Update
 This stage commits the updated `pom.xml` back to the Git repository without triggering an infinite pipeline loop.  
-**Jenkinsfile Snippet:**
+**Jenkinsfile snippet:**
 ```groovy
 stage('commit version update') {
     steps {
